@@ -4,7 +4,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../constants/theme.dart';
+import '../services/receipt_download.dart';
+import '../services/notification_service.dart';
 import '../services/order_service.dart';
+import '../services/receipt_service.dart';
 import '../utils/currency.dart';
 
 class OrderConfirmationScreen extends ConsumerStatefulWidget {
@@ -28,6 +31,20 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
       if (match.isNotEmpty) { _order = match.first; }
       if (mounted) setState(() => _loading = false);
     } catch (_) { if (mounted) setState(() => _loading = false); }
+  }
+
+  Future<void> _downloadReceipt() async {
+    if (_order == null) return;
+    final bytes = await ReceiptService.buildReceiptBytes(_order!);
+    final fileName = ReceiptService.buildReceiptFileName(_order!);
+    final downloaded = await downloadReceiptPdf(bytes, fileName);
+    if (mounted) {
+      if (downloaded) {
+        NotificationService.showSnackBar(context, 'PDF telecharge. Verifiez votre dossier Telechargements');
+      } else {
+        NotificationService.showSnackBar(context, 'Impossible de telecharger le PDF', isError: true);
+      }
+    }
   }
 
   @override
@@ -78,6 +95,21 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
               Text(formatCurrency(_order!['total_amount'] ?? _order!['total']), style: GoogleFonts.inter(fontSize: AppFontSize.xl, fontWeight: FontWeight.w700, color: AppColors.primary)),
             ]),
           ]),
+        ),
+        const SizedBox(height: 12),
+        GestureDetector(
+          onTap: _downloadReceipt,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Center(
+              child: Text('Télécharger le PDF', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w700, color: Colors.white)),
+            ),
+          ),
         ),
         const SizedBox(height: 12),
         Container(padding: const EdgeInsets.all(12),

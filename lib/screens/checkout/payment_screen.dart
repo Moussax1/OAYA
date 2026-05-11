@@ -59,7 +59,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       setState(() { _loading = true; _error = ''; });
       final shipping = cart.totalPrice > 100 ? 0.0 : 9.99;
       final total = cart.totalPrice + shipping;
-      final clientSecret = await StripeService.createPaymentIntent(amount: total, currency: 'tnd');
+      final clientSecret = await StripeService.createPaymentIntent(amount: total, currency: 'eur');
       await StripeService.presentPaymentSheet(clientSecret: clientSecret, customerName: auth.user!.userMetadata?['full_name'], customerEmail: auth.user!.email);
       final items = cart.items.map((item) {
         final product = item['product'] as Map<String, dynamic>;
@@ -103,7 +103,11 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
         decoration: const BoxDecoration(color: AppColors.surface, border: Border(bottom: BorderSide(color: AppColors.border))),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          GestureDetector(onTap: () => context.pop(), child: const Padding(padding: EdgeInsets.all(4), child: Icon(FeatherIcons.arrowLeft, size: 22))),
+          IconButton(
+            tooltip: 'Retour',
+            onPressed: () => context.pop(),
+            icon: const Icon(FeatherIcons.arrowLeft, size: 22),
+          ),
           Text('Paiement', style: GoogleFonts.playfairDisplay(fontSize: AppFontSize.lg, fontWeight: FontWeight.w700)),
           const SizedBox(width: 30),
         ]),
@@ -158,36 +162,58 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       Container(
         padding: const EdgeInsets.all(AppSpacing.base),
         decoration: BoxDecoration(color: AppColors.surface, border: const Border(top: BorderSide(color: AppColors.border)), boxShadow: AppShadow.sheet),
-        child: GestureDetector(onTap: _loading ? null : () { _method == 'stripe' ? _handleStripe() : _handleCOD(); },
-          child: AnimatedContainer(duration: const Duration(milliseconds: 200), width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: _loading ? 0.7 : 1), borderRadius: BorderRadius.circular(AppRadius.md)),
-            child: Center(child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                : Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(_method == 'stripe' ? FeatherIcons.creditCard : FeatherIcons.checkCircle, size: 18, color: Colors.white), const SizedBox(width: 10),
-                    Text(_method == 'stripe' ? 'Payer par carte' : 'Confirmer la commande',
-                        style: GoogleFonts.inter(fontSize: AppFontSize.base, fontWeight: FontWeight.w700, color: Colors.white)),
-                  ])))),
+        child: Semantics(
+          button: true,
+          enabled: !_loading,
+          label: _method == 'stripe' ? 'Payer par carte' : 'Confirmer la commande',
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              onTap: _loading ? null : () { _method == 'stripe' ? _handleStripe() : _handleCOD(); },
+              child: AnimatedContainer(duration: const Duration(milliseconds: 200), width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: _loading ? 0.7 : 1), borderRadius: BorderRadius.circular(AppRadius.md)),
+                child: Center(child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(_method == 'stripe' ? FeatherIcons.creditCard : FeatherIcons.checkCircle, size: 18, color: Colors.white), const SizedBox(width: 10),
+                        Text(_method == 'stripe' ? 'Payer par carte' : 'Confirmer la commande',
+                            style: GoogleFonts.inter(fontSize: AppFontSize.base, fontWeight: FontWeight.w700, color: Colors.white)),
+                      ]))),
+            ),
+          ),
+        ),
       ),
     ])));
   }
 
   Widget _paymentOption(String value, IconData icon, String title, String sub, {Widget? trailing}) {
     final active = _method == value;
-    return GestureDetector(onTap: () => setState(() => _method = value),
-      child: Container(padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: active ? const Color(0xFFFEFCE8) : AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.md), border: Border.all(color: active ? AppColors.accent : AppColors.border, width: 1.5)),
-        child: Row(children: [
-          Container(width: 20, height: 20, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: active ? AppColors.accent : AppColors.textMuted, width: 2)),
-            child: active ? Center(child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle))) : null),
-          const SizedBox(width: 16),
-          Icon(icon, size: 24, color: active ? AppColors.primary : AppColors.textMuted), const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, style: GoogleFonts.inter(fontSize: AppFontSize.base, fontWeight: FontWeight.w600, color: active ? AppColors.primary : AppColors.textSecondary)),
-            Text(sub, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
-          ])),
-          if (trailing != null) trailing,
-        ])));
+    return Semantics(
+      button: true,
+      selected: active,
+      label: title,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          onTap: () => setState(() => _method = value),
+          child: Container(padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(color: active ? const Color(0xFFFEFCE8) : AppColors.surface,
+              borderRadius: BorderRadius.circular(AppRadius.md), border: Border.all(color: active ? AppColors.accent : AppColors.border, width: 1.5)),
+            child: Row(children: [
+              Container(width: 20, height: 20, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: active ? AppColors.accent : AppColors.textMuted, width: 2)),
+                child: active ? Center(child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle))) : null),
+              const SizedBox(width: 16),
+              Icon(icon, size: 24, color: active ? AppColors.primary : AppColors.textMuted), const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(title, style: GoogleFonts.inter(fontSize: AppFontSize.base, fontWeight: FontWeight.w600, color: active ? AppColors.primary : AppColors.textSecondary)),
+                Text(sub, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textSecondary)),
+              ])),
+              if (trailing != null) trailing,
+            ])),
+        ),
+      ),
+    );
   }
 
   Widget _summaryRow(String l, String v, {Color? valueColor}) => Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [

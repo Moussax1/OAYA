@@ -1,0 +1,908 @@
+openapi: 3.0.3
+info:
+  title: OAYA E-Commerce API
+  version: 1.0.0
+  description: |
+    API REST complète pour l'application OAYA.
+    Basée sur Supabase (PostgreSQL + Auth) et Edge Functions (Deno).
+    Authentification via Bearer token (Supabase anon key ou service role key).
+
+servers:
+  - url: https://{project-ref}.supabase.co
+    variables:
+      project-ref:
+        default: your-project-ref
+        description: Votre projet Supabase
+
+components:
+  securitySchemes:
+    anonKey:
+      type: http
+      scheme: bearer
+      description: Supabase anon key (clé publique, RLS activé)
+    serviceRoleKey:
+      type: http
+      scheme: bearer
+      description: Supabase service_role key (bypass RLS, réservé Edge Functions)
+    apiKey:
+      type: apiKey
+      in: header
+      name: apikey
+      description: Supabase anon key ou service_role key
+
+  schemas:
+    Profile:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: ID de l'utilisateur (lié à auth.users)
+        full_name:
+          type: string
+        avatar_url:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [user, admin, owner]
+          default: user
+        fcm_token:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+          format: float
+          minimum: 0
+        original_price:
+          type: number
+          format: float
+          default: 0
+        image_url:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        badge:
+          type: string
+          nullable: true
+          enum: [Nouveau, Best-seller, Promotion]
+        stock:
+          type: integer
+          minimum: 0
+        active:
+          type: boolean
+          default: true
+        created_at:
+          type: string
+          format: date-time
+
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        product:
+          $ref: '#/components/schemas/Product'
+
+    Address:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        full_name:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        postal_code:
+          type: string
+        is_default:
+          type: boolean
+          default: false
+        created_at:
+          type: string
+          format: date-time
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        total_amount:
+          type: number
+          format: float
+        shipping:
+          type: number
+          format: float
+          default: 0
+        status:
+          type: string
+          enum: [pending, paid, shipped, delivered, cancelled, failed]
+          default: pending
+        payment_method:
+          type: string
+          enum: [cod, card, stripe]
+          default: cod
+        stripe_payment_id:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        order_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+
+    OrderItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        unit_price:
+          type: number
+          format: float
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        product:
+          $ref: '#/components/schemas/Product'
+
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+          nullable: true
+        read:
+          type: boolean
+          default: false
+        created_at:
+          type: string
+          format: date-time
+
+    Review:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        comment:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    WishlistItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        product:
+          $ref: '#/components/schemas/Product'
+
+    AuditLog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+          nullable: true
+        target_user_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        old_value:
+          type: string
+          nullable: true
+        new_value:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    PaymentIntentRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: number
+          example: 129.99
+        currency:
+          type: string
+          example: eur
+
+    PaymentIntentResponse:
+      type: object
+      properties:
+        clientSecret:
+          type: string
+        paymentIntentId:
+          type: string
+
+    SendEmailRequest:
+      type: object
+      required: [order_id]
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        user_email:
+          type: string
+          format: email
+          nullable: true
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+paths:
+  # ─── Auth (via Supabase Auth API) ─────────────────────────────────────
+  /auth/v1/signup:
+    post:
+      summary: Inscription utilisateur
+      tags: [Auth]
+      security:
+        - anonKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 6 }
+                data:
+                  type: object
+                  properties:
+                    full_name: { type: string }
+      responses:
+        '200':
+          description: Utilisateur créé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/Profile' }
+                  session: { type: object }
+
+  /auth/v1/token:
+    post:
+      summary: Connexion (mot de passe)
+      tags: [Auth]
+      security:
+        - anonKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Session créée
+
+  # ─── Products (REST) ─────────────────────────────────────────────────
+  /rest/v1/products:
+    get:
+      summary: Liste des produits actifs
+      tags: [Products]
+      security:
+        - anonKey: []
+      parameters:
+        - in: query
+          name: category
+          schema: { type: string }
+          description: Filtre par catégorie
+        - in: query
+          name: name
+          schema: { type: string }
+          description: Recherche par nom (ilike)
+        - in: query
+          name: order
+          schema: { type: string, default: created_at.desc }
+      responses:
+        '200':
+          description: Liste des produits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Product'
+    post:
+      summary: Créer un produit (admin)
+      tags: [Products]
+      security:
+        - serviceRoleKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Product'
+      responses:
+        '201':
+          description: Produit créé
+    patch:
+      summary: Modifier un produit (admin)
+      tags: [Products]
+      security:
+        - serviceRoleKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Produit modifié
+    delete:
+      summary: Supprimer un produit (admin)
+      tags: [Products]
+      security:
+        - serviceRoleKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Produit supprimé
+
+  # ─── Cart Items (REST) ───────────────────────────────────────────────
+  /rest/v1/cart_items:
+    get:
+      summary: Panier de l'utilisateur connecté
+      tags: [Cart]
+      security:
+        - anonKey: []
+      responses:
+        '200':
+          description: Articles du panier
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CartItem'
+    post:
+      summary: Ajouter un article au panier
+      tags: [Cart]
+      security:
+        - anonKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, product_id, quantity]
+              properties:
+                user_id: { type: string, format: uuid }
+                product_id: { type: string, format: uuid }
+                quantity: { type: integer, minimum: 1 }
+      responses:
+        '201':
+          description: Article ajouté
+    patch:
+      summary: Modifier la quantité
+      tags: [Cart]
+      security:
+        - anonKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quantity: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Quantité modifiée
+    delete:
+      summary: Supprimer un article du panier
+      tags: [Cart]
+      security:
+        - anonKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Article supprimé
+
+  # ─── Orders (REST) ───────────────────────────────────────────────────
+  /rest/v1/orders:
+    get:
+      summary: Commandes de l'utilisateur connecté
+      tags: [Orders]
+      security:
+        - anonKey: []
+      responses:
+        '200':
+          description: Liste des commandes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+    post:
+      summary: Créer une commande
+      tags: [Orders]
+      security:
+        - anonKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, total_amount]
+              properties:
+                user_id: { type: string, format: uuid }
+                total_amount: { type: number }
+                shipping: { type: number }
+                status: { type: string, default: pending }
+                payment_method: { type: string, default: cod }
+                stripe_payment_id: { type: string }
+      responses:
+        '201':
+          description: Commande créée
+    patch:
+      summary: Mettre à jour le statut d'une commande (admin via webhook)
+      tags: [Orders]
+      security:
+        - serviceRoleKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Statut mis à jour
+
+  # ─── Notifications (REST) ────────────────────────────────────────────
+  /rest/v1/notifications:
+    get:
+      summary: Notifications de l'utilisateur connecté
+      tags: [Notifications]
+      security:
+        - anonKey: []
+      responses:
+        '200':
+          description: Liste des notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Notification'
+    post:
+      summary: Créer une notification (système)
+      tags: [Notifications]
+      security:
+        - serviceRoleKey: []
+      responses:
+        '201':
+          description: Notification créée
+    patch:
+      summary: Marquer une notification comme lue
+      tags: [Notifications]
+      security:
+        - anonKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                read: { type: boolean, default: true }
+      responses:
+        '200':
+          description: Notification mise à jour
+
+  # ─── Addresses (REST) ────────────────────────────────────────────────
+  /rest/v1/addresses:
+    get:
+      summary: Adresses de l'utilisateur connecté
+      tags: [Addresses]
+      security:
+        - anonKey: []
+      responses:
+        '200':
+          description: Liste des adresses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Address'
+    post:
+      summary: Ajouter une adresse
+      tags: [Addresses]
+      security:
+        - anonKey: []
+      responses:
+        '201':
+          description: Adresse créée
+    patch:
+      summary: Modifier une adresse
+      tags: [Addresses]
+      security:
+        - anonKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Adresse modifiée
+    delete:
+      summary: Supprimer une adresse
+      tags: [Addresses]
+      security:
+        - anonKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Adresse supprimée
+
+  # ─── Reviews (REST) ──────────────────────────────────────────────────
+  /rest/v1/reviews:
+    get:
+      summary: Avis d'un produit
+      tags: [Reviews]
+      security:
+        - anonKey: []
+      parameters:
+        - in: query
+          name: product_id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Liste des avis
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Review'
+    post:
+      summary: Ajouter un avis
+      tags: [Reviews]
+      security:
+        - anonKey: []
+      responses:
+        '201':
+          description: Avis créé
+
+  # ─── Wishlist (REST) ─────────────────────────────────────────────────
+  /rest/v1/wishlist_items:
+    get:
+      summary: Wishlist de l'utilisateur connecté
+      tags: [Wishlist]
+      security:
+        - anonKey: []
+      responses:
+        '200':
+          description: Liste des favoris
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WishlistItem'
+    post:
+      summary: Ajouter un favori
+      tags: [Wishlist]
+      security:
+        - anonKey: []
+      responses:
+        '201':
+          description: Favori ajouté
+    delete:
+      summary: Supprimer un favori
+      tags: [Wishlist]
+      security:
+        - anonKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Favori supprimé
+
+  # ─── Profiles (REST) ─────────────────────────────────────────────────
+  /rest/v1/profiles:
+    get:
+      summary: Profile de l'utilisateur connecté
+      tags: [Profiles]
+      security:
+        - anonKey: []
+      responses:
+        '200':
+          description: Profile utilisateur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+    patch:
+      summary: Mettre à jour le profile
+      tags: [Profiles]
+      security:
+        - anonKey: []
+      responses:
+        '200':
+          description: Profile mis à jour
+
+  # ─── Payment Methods (REST) ──────────────────────────────────────────
+  /rest/v1/payment_methods:
+    get:
+      summary: Moyens de paiement enregistrés
+      tags: [Payment Methods]
+      security:
+        - anonKey: []
+      responses:
+        '200':
+          description: Liste des moyens de paiement
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    user_id: { type: string, format: uuid }
+                    type: { type: string, enum: [stripe, cod] }
+                    stripe_payment_method_id: { type: string, nullable: true }
+                    last_four: { type: string, nullable: true }
+                    brand: { type: string, nullable: true }
+                    is_default: { type: boolean }
+                    created_at: { type: string, format: date-time }
+    post:
+      summary: Enregistrer un moyen de paiement
+      tags: [Payment Methods]
+      security:
+        - anonKey: []
+      responses:
+        '201':
+          description: Moyen de paiement enregistré
+    delete:
+      summary: Supprimer un moyen de paiement
+      tags: [Payment Methods]
+      security:
+        - anonKey: []
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: Moyen de paiement supprimé
+
+  # ─── RPC ─────────────────────────────────────────────────────────────
+  /rest/v1/rpc/is_admin:
+    get:
+      summary: Vérifier si l'utilisateur connecté est admin
+      tags: [Auth]
+      security:
+        - anonKey: []
+      responses:
+        '200':
+          description: true/false
+          content:
+            application/json:
+              schema:
+                type: boolean
+
+  # ─── Edge Functions ──────────────────────────────────────────────────
+  /functions/v1/create-payment-intent:
+    post:
+      summary: Créer un PaymentIntent Stripe
+      tags: [Payments]
+      security:
+        - anonKey: []
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentIntentRequest'
+      responses:
+        '200':
+          description: PaymentIntent créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentIntentResponse'
+        '400':
+          description: Erreur de validation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /functions/v1/stripe-webhook:
+    post:
+      summary: Webhook Stripe (paiement confirmé/échoué)
+      tags: [Payments]
+      security: []
+      parameters:
+        - in: header
+          name: stripe-signature
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Événement reçu
+        '400':
+          description: Signature invalide
+
+  /functions/v1/send-order-email:
+    post:
+      summary: Envoyer un email de confirmation de commande
+      tags: [Notifications]
+      security:
+        - serviceRoleKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendEmailRequest'
+      responses:
+        '200':
+          description: Email envoyé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  email_result: { type: object }
+        '400':
+          description: Données manquantes
+        '404':
+          description: Commande introuvable
+
+  /functions/v1/send-push-notification:
+    post:
+      summary: Envoyer une notification push FCM
+      tags: [Notifications]
+      security:
+        - serviceRoleKey: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, title, body]
+              properties:
+                user_id: { type: string, format: uuid }
+                title: { type: string }
+                body: { type: string }
+      responses:
+        '200':
+          description: Notification push envoyée

@@ -19,8 +19,18 @@ import 'screens/checkout/success_screen.dart';
 import 'screens/order_confirmation_screen.dart';
 import 'screens/order_history_screen.dart';
 import 'screens/admin/admin_users_screen.dart';
+import 'screens/admin/admin_products_screen.dart';
+import 'screens/admin/admin_orders_screen.dart';
 import 'screens/forgot_password_screen.dart';
 import 'screens/reset_password_screen.dart';
+import 'screens/address_list_screen.dart';
+import 'screens/address_form_screen.dart';
+import 'screens/payment_methods_screen.dart';
+import 'screens/my_reviews_screen.dart';
+import 'screens/notification_inbox_screen.dart';
+import 'screens/notification_settings_screen.dart';
+import 'screens/support_screen.dart';
+import 'screens/settings_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -59,10 +69,31 @@ final GoRouter appRouter = GoRouter(
         builder: (_, s) => const OrderHistoryScreen()),
     GoRoute(path: '/admin/users', parentNavigatorKey: _rootNavigatorKey,
         builder: (_, s) => const AdminUsersScreen()),
+    GoRoute(path: '/admin/products', parentNavigatorKey: _rootNavigatorKey,
+      builder: (_, s) => const AdminProductsScreen()),
+    GoRoute(path: '/admin/orders', parentNavigatorKey: _rootNavigatorKey,
+      builder: (_, s) => const AdminOrdersScreen()),
     GoRoute(path: '/forgot-password', parentNavigatorKey: _rootNavigatorKey,
         builder: (_, s) => const ForgotPasswordScreen()),
     GoRoute(path: '/reset-password', parentNavigatorKey: _rootNavigatorKey,
         builder: (_, s) => const ResetPasswordScreen()),
+    // Phase 3: New screens
+    GoRoute(path: '/addresses', parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, s) => const AddressListScreen()),
+    GoRoute(path: '/addresses/new', parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, s) => const AddressFormScreen()),
+    GoRoute(path: '/payment-methods', parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, s) => const PaymentMethodsScreen()),
+    GoRoute(path: '/my-reviews', parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, s) => const MyReviewsScreen()),
+    GoRoute(path: '/notification-inbox', parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, s) => const NotificationInboxScreen()),
+    GoRoute(path: '/notifications', parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, s) => const NotificationSettingsScreen()),
+    GoRoute(path: '/support', parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, s) => const SupportScreen()),
+    GoRoute(path: '/settings', parentNavigatorKey: _rootNavigatorKey,
+        builder: (_, s) => const SettingsScreen()),
   ],
 );
 

@@ -52,7 +52,10 @@ class CartScreen extends ConsumerWidget {
           decoration: const BoxDecoration(color: AppColors.surface, border: Border(bottom: BorderSide(color: AppColors.border))),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text('Mon Panier', style: GoogleFonts.playfairDisplay(fontSize: AppFontSize.xl, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-            GestureDetector(onTap: () => ref.read(cartProvider.notifier).clearCart(), child: Text('Vider', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w500, color: AppColors.error))),
+            GestureDetector(onTap: () {
+              ref.read(cartProvider.notifier).clearCart();
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Panier vidé'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+            }, child: Text('Vider', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w500, color: AppColors.error))),
           ]),
         ),
         Expanded(child: ListView.builder(
@@ -65,9 +68,24 @@ class CartScreen extends ConsumerWidget {
             final cartItem = {'product': product, 'quantity': item['quantity']};
             return Padding(padding: const EdgeInsets.only(bottom: 12),
               child: CartItemTile(item: cartItem,
-                onIncrease: () => ref.read(cartProvider.notifier).updateQuantity(item['id'].toString(), (item['quantity'] as int) + 1),
-                onDecrease: () => ref.read(cartProvider.notifier).updateQuantity(item['id'].toString(), (item['quantity'] as int) - 1),
-                onRemove: () => ref.read(cartProvider.notifier).removeItem(item['id'].toString())));
+                onIncrease: () {
+                  ref.read(cartProvider.notifier).updateQuantity(item['id'].toString(), (item['quantity'] as int) + 1);
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${product['name'] ?? 'Article'} : quantité augmentée'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
+                },
+                onDecrease: () {
+                  final qty = item['quantity'] as int;
+                  if (qty <= 1) {
+                    ref.read(cartProvider.notifier).removeItem(item['id'].toString());
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${product['name'] ?? 'Article'} retiré du panier'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+                  } else {
+                    ref.read(cartProvider.notifier).updateQuantity(item['id'].toString(), qty - 1);
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${product['name'] ?? 'Article'} : quantité diminuée'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)));
+                  }
+                },
+                onRemove: () {
+                  ref.read(cartProvider.notifier).removeItem(item['id'].toString());
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${product['name'] ?? 'Article'} retiré du panier'), behavior: SnackBarBehavior.floating, duration: Duration(seconds: 2)));
+                }));
           },
         )),
       ]),

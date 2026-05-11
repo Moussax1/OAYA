@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 
 void main() {
-  String? testProductId;
   String? testUserId;
   Map<String, dynamic>? testProduct;
 
@@ -40,7 +39,6 @@ void main() {
     final products = await ProductService.getProducts();
     if (products.isNotEmpty) {
       testProduct = products.first;
-      testProductId = testProduct!['id'];
     }
   });
 

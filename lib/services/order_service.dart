@@ -1,4 +1,5 @@
 import 'supabase_service.dart';
+import 'admin_service.dart';
 
 class OrderService {
   OrderService._();
@@ -49,5 +50,18 @@ class OrderService {
         .select('*, order_items(*, product:products(*))')
         .order('created_at', ascending: false);
     return List<Map<String, dynamic>>.from(data);
+  }
+
+  static Future<Map<String, dynamic>> updateOrderStatus(String orderId, String status) async {
+    if (!await AdminService.isCurrentUserAdmin()) {
+      throw Exception('Unauthorized');
+    }
+    final data = await SupabaseService.client
+        .from('orders')
+        .update({'status': status})
+        .eq('id', orderId)
+        .select()
+        .single();
+    return Map<String, dynamic>.from(data);
   }
 }

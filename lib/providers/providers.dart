@@ -5,6 +5,10 @@ import '../services/cart_service.dart';
 import '../services/order_service.dart';
 import '../services/notification_service.dart';
 import '../services/product_service.dart';
+import '../services/address_service.dart';
+import '../services/wishlist_service.dart';
+import '../services/review_service.dart';
+import '../services/payment_method_service.dart';
 
 // ─── AUTH ──────────────────────────────────────────────────────────────────────
 
@@ -16,11 +20,15 @@ class AuthState {
 
   User? get user => session?.user;
   bool get isAuthenticated => session?.user != null;
-  bool get isAdmin => profile?['role'] == 'admin';
+  bool get isAdmin {
+    final role = profile?['role'] as String?;
+    return role == 'admin' || role == 'owner';
+  }
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier() : super(AuthState()) {
+  final Ref ref;
+  AuthNotifier(this.ref) : super(AuthState()) {
     _init();
   }
 
@@ -35,11 +43,19 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = AuthState(session: session, profile: profile, isLoading: false);
 
     _client.auth.onAuthStateChange.listen((data) async {
+      final hadSession = state.session?.user != null;
       Map<String, dynamic>? p;
       if (data.session?.user != null) {
         p = await _fetchProfile(data.session!.user.id);
       }
       state = AuthState(session: data.session, profile: p, isLoading: false);
+      if (!hadSession && data.session?.user != null) {
+        try {
+          await ref.read(cartProvider.notifier).mergeLocalCartFromState();
+          ref.invalidate(wishlistProvider);
+          ref.invalidate(addressesProvider);
+        } catch (_) {}
+      }
     });
   }
 
@@ -51,13 +67,30 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<bool> isCurrentUserAdmin() async {
+    try {
+      final result = await _client.rpc('is_admin');
+      return result == true;
+    } catch (_) {
+      return state.profile?['role'] == 'admin' || state.profile?['role'] == 'owner';
+    }
+  }
+
   Future<AuthResponse> signUp(String email, String password, String fullName) async {
     final res = await _client.auth.signUp(email: email, password: password, data: {'full_name': fullName});
+    try {
+      await ref.read(cartProvider.notifier).mergeLocalCartFromState();
+      await ref.read(cartProvider.notifier).loadCart();
+    } catch (_) {}
     return res;
   }
 
   Future<void> signIn(String email, String password) async {
     await _client.auth.signInWithPassword(email: email, password: password);
+    try {
+      await ref.read(cartProvider.notifier).mergeLocalCartFromState();
+      await ref.read(cartProvider.notifier).loadCart();
+    } catch (_) {}
   }
 
   Future<void> resetPassword(String email) async {
@@ -70,7 +103,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 }
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) => AuthNotifier());
+final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) => AuthNotifier(ref));
 
 // ─── CART (Supabase-backed) ────────────────────────────────────────────────────
 
@@ -111,25 +144,83 @@ class CartNotifier extends StateNotifier<CartState> {
   }
 
   Future<void> addItem(String productId, [int qty = 1]) async {
-    if (_userId == null) return;
+    if (_userId == null) {
+      try {
+        final product = await ProductService.getProduct(productId);
+        if (product == null) return;
+        var found = false;
+        final updated = <Map<String, dynamic>>[];
+        for (final it in state.items) {
+          final currentProductId = (it['product'] as Map<String, dynamic>?)?['id']?.toString() ?? it['product_id']?.toString();
+          if (currentProductId == productId) {
+            found = true;
+            updated.add({...it, 'quantity': (it['quantity'] as int) + qty});
+          } else {
+            updated.add(it);
+          }
+        }
+        if (!found) {
+          updated.add({'product': product, 'quantity': qty});
+        }
+        state = CartState(items: updated);
+      } catch (_) {}
+      return;
+    }
     await CartService.addItem(_userId!, productId, qty);
     await loadCart();
   }
 
   Future<void> updateQuantity(String itemId, int quantity) async {
+    if (_userId == null) {
+      final updated = state.items.map((it) {
+        final id = it['id'] ?? it['product']?['id'];
+        if (id == itemId) {
+          return {...it, 'quantity': quantity};
+        }
+        return it;
+      }).toList();
+      state = CartState(items: updated);
+      return;
+    }
     await CartService.updateQuantity(itemId, quantity);
     await loadCart();
   }
 
   Future<void> removeItem(String itemId) async {
+    if (_userId == null) {
+      state = CartState(items: state.items.where((it) {
+        final id = it['id'] ?? it['product']?['id'];
+        return id != itemId;
+      }).toList());
+      return;
+    }
     await CartService.removeItem(itemId);
     await loadCart();
   }
 
   Future<void> clearCart() async {
-    if (_userId == null) return;
+    if (_userId == null) {
+      state = CartState();
+      return;
+    }
     await CartService.clearCart(_userId!);
     state = CartState();
+  }
+
+  Future<void> mergeLocalCartFromState() async {
+    final userId = _userId;
+    if (userId == null) return;
+    try {
+      for (final it in state.items) {
+        final product = it['product'] as Map<String, dynamic>?;
+        final productId = product != null ? product['id'] : it['product_id'];
+        final qty = it['quantity'] as int? ?? 1;
+        if (productId != null) {
+          await CartService.addItem(userId, productId.toString(), qty);
+        }
+      }
+      await loadCart();
+    } catch (_) {}
   }
 }
 
@@ -137,33 +228,86 @@ final cartProvider = StateNotifierProvider<CartNotifier, CartState>((ref) {
   return CartNotifier(ref);
 });
 
-// ─── WISHLIST (local, kept simple) ─────────────────────────────────────────────
+// ─── WISHLIST (Supabase-backed with guest fallback) ────────────────────────────
 
 class WishlistNotifier extends StateNotifier<List<Map<String, dynamic>>> {
-  WishlistNotifier() : super([]);
+  final Ref ref;
+  WishlistNotifier(this.ref) : super([]);
 
-  void add(Map<String, dynamic> product) {
-    if (state.any((p) => p['id'] == product['id'])) return;
-    state = [...state, product];
-  }
+  String? get _userId => ref.read(authProvider).user?.id;
 
-  void remove(dynamic productId) {
-    state = state.where((p) => p['id'] != productId).toList();
-  }
-
-  void toggle(Map<String, dynamic> product) {
-    if (state.any((p) => p['id'] == product['id'])) {
-      remove(product['id']);
-    } else {
-      add(product);
+  Future<void> loadWishlist() async {
+    final uid = _userId;
+    if (uid == null) { state = [..._guestList]; return; }
+    try {
+      state = await WishlistService.getWishlist(uid);
+    } catch (_) {
+      state = [];
     }
   }
 
-  bool isWishlisted(dynamic productId) => state.any((p) => p['id'] == productId);
+  Future<void> add(Map<String, dynamic> product) async {
+    final uid = _userId;
+    if (uid == null) {
+      if (_guestList.any((p) => p['id'] == product['id'])) return;
+      _guestList.add(product);
+      state = [..._guestList];
+      return;
+    }
+    if (state.any((p) => p['product']?['id'] == product['id'] || p['product_id'] == product['id'])) return;
+    try {
+      await WishlistService.addItem(uid, product['id'].toString());
+      await loadWishlist();
+    } catch (_) {}
+  }
+
+  Future<void> remove(dynamic productId) async {
+    final uid = _userId;
+    if (uid == null) {
+      _guestList.removeWhere((p) => p['id'] == productId || p['product_id'] == productId);
+      state = [..._guestList];
+      return;
+    }
+    try {
+      await WishlistService.removeItem(uid, productId.toString());
+      await loadWishlist();
+    } catch (_) {}
+  }
+
+  Future<void> toggle(Map<String, dynamic> product) async {
+    final uid = _userId;
+    if (uid == null) {
+      if (_guestList.any((p) => p['id'] == product['id'])) {
+        _guestList.removeWhere((p) => p['id'] == product['id']);
+      } else {
+        _guestList.add(product);
+      }
+      state = [..._guestList];
+      return;
+    }
+    final already = state.any((p) =>
+        p['product']?['id'] == product['id'] || p['product_id'] == product['id']);
+    if (already) {
+      await remove(product['id']);
+    } else {
+      await add(product);
+    }
+  }
+
+  bool isWishlisted(dynamic productId) {
+    final uid = _userId;
+    if (uid == null) {
+      return _guestList.any((p) => p['id'] == productId || p['product_id'] == productId);
+    }
+    return state.any((p) =>
+        p['product']?['id'] == productId || p['product_id'] == productId);
+  }
+
+  final List<Map<String, dynamic>> _guestList = [];
 }
 
 final wishlistProvider =
-    StateNotifierProvider<WishlistNotifier, List<Map<String, dynamic>>>((ref) => WishlistNotifier());
+    StateNotifierProvider<WishlistNotifier, List<Map<String, dynamic>>>((ref) => WishlistNotifier(ref));
 
 // ─── ORDERS ────────────────────────────────────────────────────────────────────
 
@@ -195,4 +339,52 @@ final notificationsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) a
   final auth = ref.watch(authProvider);
   if (!auth.isAuthenticated) return [];
   return await NotificationService.getNotifications(auth.user!.id);
+});
+
+// ─── ADDRESSES ─────────────────────────────────────────────────────────────────
+
+final addressesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.isAuthenticated) return [];
+  return await AddressService.getAddresses(auth.user!.id);
+});
+
+final defaultAddressProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.isAuthenticated) return null;
+  return await AddressService.getDefaultAddress(auth.user!.id);
+});
+
+// ─── REVIEWS ───────────────────────────────────────────────────────────────────
+
+final reviewsProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, productId) async {
+  return await ReviewService.getReviews(productId);
+});
+
+final averageRatingProvider = FutureProvider.family<double, String>((ref, productId) async {
+  return await ReviewService.getAverageRating(productId);
+});
+
+final reviewCountProvider = FutureProvider.family<int, String>((ref, productId) async {
+  return await ReviewService.getReviewCount(productId);
+});
+
+final userReviewProvider = FutureProvider.family<Map<String, dynamic>?, String>((ref, productId) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.isAuthenticated) return null;
+  return await ReviewService.getUserReview(auth.user!.id, productId);
+});
+
+final userReviewsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.isAuthenticated) return [];
+  return await ReviewService.getUserReviews(auth.user!.id);
+});
+
+// ─── PAYMENT METHODS ───────────────────────────────────────────────────────────
+
+final paymentMethodsProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.isAuthenticated) return [];
+  return await PaymentMethodService.getPaymentMethods(auth.user!.id);
 });

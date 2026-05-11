@@ -37,6 +37,11 @@ DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 CREATE POLICY "Users can update own profile"
   ON public.profiles FOR UPDATE USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Admins can update all profiles" ON public.profiles;
+CREATE POLICY "Admins can update all profiles"
+  ON public.profiles FOR UPDATE USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
 DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
 CREATE POLICY "Admins can view all profiles"
   ON public.profiles FOR SELECT USING (public.is_admin());
@@ -52,7 +57,7 @@ BEGIN
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-    'customer'
+    'user'
   );
   RETURN NEW;
 END;
@@ -205,3 +210,46 @@ CREATE POLICY "Users can update their own notifications" ON public.notifications
 
 DROP POLICY IF EXISTS "System can insert notifications" ON public.notifications;
 CREATE POLICY "System can insert notifications" ON public.notifications FOR INSERT WITH CHECK (true);
+
+
+-- 7. AUDIT LOGS
+CREATE TABLE IF NOT EXISTS public.audit_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  actor_id UUID REFERENCES auth.users ON DELETE SET NULL,
+  target_user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
+  action TEXT NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admins can view audit logs" ON public.audit_logs;
+CREATE POLICY "Admins can view audit logs"
+  ON public.audit_logs FOR SELECT USING (public.is_admin());
+
+DROP FUNCTION IF EXISTS public.log_profile_role_change();
+
+CREATE OR REPLACE FUNCTION public.log_profile_role_change()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.role IS DISTINCT FROM OLD.role THEN
+    INSERT INTO public.audit_logs (actor_id, target_user_id, action, old_value, new_value)
+    VALUES (
+      auth.uid(),
+      NEW.id,
+      'profile.role.changed',
+      OLD.role,
+      NEW.role
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS profile_role_audit_trigger ON public.profiles;
+CREATE TRIGGER profile_role_audit_trigger
+  AFTER UPDATE OF role ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.log_profile_role_change();

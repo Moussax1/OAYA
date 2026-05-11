@@ -9,12 +9,11 @@ import '../services/order_service.dart';
 import '../widgets/order_card.dart';
 
 const _menuItems = [
-  {'icon': FeatherIcons.mapPin, 'label': 'Mes adresses', 'sub': 'Gérer vos adresses de livraison'},
-  {'icon': FeatherIcons.creditCard, 'label': 'Moyens de paiement', 'sub': 'Cartes et méthodes de paiement'},
-  {'icon': FeatherIcons.star, 'label': 'Mes avis', 'sub': 'Produits que vous avez évalués'},
-  {'icon': FeatherIcons.bell, 'label': 'Notifications', 'sub': 'Alertes et promotions'},
-  {'icon': FeatherIcons.messageCircle, 'label': 'Support client', 'sub': 'Aide et assistance 24/7'},
-  {'icon': FeatherIcons.settings, 'label': 'Paramètres', 'sub': 'Langue, confidentialité'},
+  {'icon': FeatherIcons.mapPin, 'label': 'Mes adresses', 'sub': 'Gérer vos adresses de livraison', 'route': '/addresses'},
+  {'icon': FeatherIcons.creditCard, 'label': 'Moyens de paiement', 'sub': 'Cartes et méthodes de paiement', 'route': '/payment-methods'},
+  {'icon': FeatherIcons.star, 'label': 'Mes avis', 'sub': 'Produits que vous avez évalués', 'route': '/my-reviews'},
+  {'icon': FeatherIcons.messageCircle, 'label': 'Support client', 'sub': 'Aide et assistance 24/7', 'route': '/support'},
+  {'icon': FeatherIcons.settings, 'label': 'Paramètres', 'sub': 'Langue, confidentialité', 'route': '/settings'},
 ];
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -108,29 +107,77 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (auth.isAdmin) Container(
         margin: const EdgeInsets.fromLTRB(AppSpacing.base, AppSpacing.xl, AppSpacing.base, 0),
         decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(AppRadius.xl), border: Border.all(color: AppColors.accent), boxShadow: AppShadow.card),
-        child: ListTile(
-          leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(AppRadius.sm)),
-            child: const Center(child: Icon(FeatherIcons.users, size: 19, color: Color(0xFFB45309)))),
-          title: Text('Gestion des Utilisateurs', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-          subtitle: Text('Voir et gérer tous les comptes', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
-          trailing: const Icon(FeatherIcons.chevronRight, size: 18, color: AppColors.textMuted),
-          onTap: () => context.push('/admin/users'),
+        child: Column(
+          children: [
+            ListTile(
+              leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(AppRadius.sm)),
+                child: const Center(child: Icon(FeatherIcons.users, size: 19, color: Color(0xFFB45309)))),
+              title: Text('Gestion des Utilisateurs', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              subtitle: Text('Voir et gérer tous les comptes', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
+              trailing: const Icon(FeatherIcons.chevronRight, size: 18, color: AppColors.textMuted),
+              onTap: () => context.push('/admin/users'),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            ListTile(
+              leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: AppColors.accentLight, borderRadius: BorderRadius.circular(AppRadius.sm)),
+                child: const Center(child: Icon(FeatherIcons.shoppingBag, size: 19, color: AppColors.primary))),
+              title: Text('Gestion des Produits', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              subtitle: Text('Créer, modifier et supprimer les produits', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
+              trailing: const Icon(FeatherIcons.chevronRight, size: 18, color: AppColors.textMuted),
+              onTap: () => context.push('/admin/products'),
+            ),
+            const Divider(height: 1, color: AppColors.border),
+            ListTile(
+              leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(AppRadius.sm)),
+                child: const Center(child: Icon(FeatherIcons.package, size: 19, color: Color(0xFF15803D)))),
+              title: Text('Gestion des Commandes', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              subtitle: Text('Mettre à jour le statut des commandes', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
+              trailing: const Icon(FeatherIcons.chevronRight, size: 18, color: AppColors.textMuted),
+              onTap: () => context.push('/admin/orders'),
+            ),
+          ],
         ),
       ),
       // Menu
       Container(
         margin: const EdgeInsets.fromLTRB(AppSpacing.base, AppSpacing.xl, AppSpacing.base, 0),
         decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(AppRadius.xl), boxShadow: AppShadow.card),
-        child: Column(children: _menuItems.map((item) => Container(
-          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
-          child: ListTile(
-            leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: AppColors.accentLight, borderRadius: BorderRadius.circular(AppRadius.sm)),
-              child: Center(child: Icon(item['icon'] as IconData, size: 19, color: AppColors.primary))),
-            title: Text(item['label'] as String, style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-            subtitle: Text(item['sub'] as String, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
-            trailing: const Icon(FeatherIcons.chevronRight, size: 18, color: AppColors.textMuted),
-          ),
-        )).toList()),
+        child: Column(children: [
+          // Notifications (with unread badge, wrapped in Consumer)
+          Consumer(builder: (context, ref, _) {
+            final unreadAsync = ref.watch(unreadNotificationCountProvider);
+            final unread = unreadAsync.asData?.value ?? 0;
+            return Container(
+              decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
+              child: ListTile(
+                leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: AppColors.accentLight, borderRadius: BorderRadius.circular(AppRadius.sm)),
+                  child: Center(child: const Icon(FeatherIcons.bell, size: 19, color: AppColors.primary))),
+                title: Text('Notifications', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                subtitle: Text('Alertes et promotions', style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
+                trailing: unread > 0
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(AppRadius.full)),
+                        child: Text('$unread', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.primary)),
+                      )
+                    : const Icon(FeatherIcons.chevronRight, size: 18, color: AppColors.textMuted),
+                onTap: () => context.push('/notification-inbox'),
+              ),
+            );
+          }),
+          // Other menu items
+          ..._menuItems.map((item) => Container(
+            decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
+            child: ListTile(
+              leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: AppColors.accentLight, borderRadius: BorderRadius.circular(AppRadius.sm)),
+                child: Center(child: Icon(item['icon'] as IconData, size: 19, color: AppColors.primary))),
+              title: Text(item['label'] as String, style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+              subtitle: Text(item['sub'] as String, style: GoogleFonts.inter(fontSize: 12, color: AppColors.textMuted)),
+              trailing: const Icon(FeatherIcons.chevronRight, size: 18, color: AppColors.textMuted),
+              onTap: () => context.push(item['route'] as String),
+            ),
+          )).toList(),
+        ]),
       ),
       // Sign out
       if (user != null) GestureDetector(onTap: () => ref.read(authProvider.notifier).signOut(),

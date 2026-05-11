@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../constants/theme.dart';
 import '../../providers/providers.dart';
+import '../../services/address_service.dart';
 import '../../widgets/progress_stepper.dart';
 
 class AddressScreen extends ConsumerStatefulWidget {
@@ -20,27 +21,69 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
   final _cityCtrl = TextEditingController();
   final _postalCtrl = TextEditingController();
   String _error = '';
+  bool _saveAddress = false;
 
   @override
   void initState() {
     super.initState();
     final profile = ref.read(authProvider).profile;
     _nameCtrl = TextEditingController(text: profile?['full_name'] ?? '');
+    _loadDefaultAddress();
+  }
+
+  Future<void> _loadDefaultAddress() async {
+    final userId = ref.read(authProvider).user?.id;
+    if (userId == null) return;
+    try {
+      final addr = await AddressService.getDefaultAddress(userId);
+      if (addr != null && mounted) {
+        setState(() {
+          _nameCtrl.text = addr['full_name'] ?? _nameCtrl.text;
+          _phoneCtrl.text = addr['phone'] ?? '';
+          _addressCtrl.text = addr['address'] ?? '';
+          _cityCtrl.text = addr['city'] ?? '';
+          _postalCtrl.text = addr['postal_code'] ?? '';
+        });
+      }
+    } catch (_) {}
   }
 
   @override
-  void dispose() { _nameCtrl.dispose(); _phoneCtrl.dispose(); _addressCtrl.dispose(); _cityCtrl.dispose(); _postalCtrl.dispose(); super.dispose(); }
+  void dispose() {
+    _nameCtrl.dispose(); _phoneCtrl.dispose(); _addressCtrl.dispose();
+    _cityCtrl.dispose(); _postalCtrl.dispose();
+    super.dispose();
+  }
 
-  void _handleNext() {
+  void _handleNext() async {
     if (_nameCtrl.text.isEmpty || _phoneCtrl.text.isEmpty || _addressCtrl.text.isEmpty || _cityCtrl.text.isEmpty || _postalCtrl.text.isEmpty) {
       setState(() => _error = 'Veuillez remplir tous les champs.'); return;
     }
     setState(() => _error = '');
-    context.push('/checkout/payment');
+
+    if (_saveAddress) {
+      final userId = ref.read(authProvider).user?.id;
+      if (userId != null) {
+        try {
+          await AddressService.addAddress(
+            userId: userId,
+            fullName: _nameCtrl.text,
+            phone: _phoneCtrl.text,
+            address: _addressCtrl.text,
+            city: _cityCtrl.text,
+            postalCode: _postalCtrl.text,
+          );
+        } catch (_) {}
+      }
+    }
+
+    if (mounted) context.push('/checkout/payment');
   }
 
   @override
   Widget build(BuildContext context) {
+    final addresses = ref.watch(addressesProvider);
+
     return Scaffold(backgroundColor: AppColors.background, body: SafeArea(child: Column(children: [
       Container(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
@@ -53,7 +96,15 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
       ),
       const ProgressStepper(currentStep: 1),
       Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(AppSpacing.xl), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Adresse de livraison', style: GoogleFonts.playfairDisplay(fontSize: AppFontSize.xl, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('Adresse de livraison', style: GoogleFonts.playfairDisplay(fontSize: AppFontSize.xl, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          if (addresses.asData?.value.isNotEmpty == true)
+            TextButton.icon(
+              onPressed: () => _showAddressPicker(context, addresses.asData!.value),
+              icon: const Icon(FeatherIcons.mapPin, size: 14),
+              label: Text('Choisir', style: GoogleFonts.inter(fontSize: 12)),
+            ),
+        ]),
         const SizedBox(height: 4),
         Text('Où souhaitez-vous recevoir votre commande ?', style: GoogleFonts.inter(fontSize: AppFontSize.sm, color: AppColors.textSecondary)),
         const SizedBox(height: 24),
@@ -70,6 +121,13 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
           const SizedBox(width: 12),
           Expanded(flex: 2, child: _field('Ville', _cityCtrl, 'Tunis')),
         ]),
+        CheckboxListTile(
+          value: _saveAddress,
+          onChanged: (v) => setState(() => _saveAddress = v ?? false),
+          title: Text('Sauvegarder cette adresse', style: GoogleFonts.inter(fontSize: AppFontSize.sm)),
+          controlAffinity: ListTileControlAffinity.leading,
+          contentPadding: EdgeInsets.zero,
+        ),
       ]))),
       Container(
         padding: const EdgeInsets.all(AppSpacing.base),
@@ -80,6 +138,34 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
             child: Center(child: Text('Continuer vers le paiement', style: GoogleFonts.inter(fontSize: AppFontSize.base, fontWeight: FontWeight.w700, color: Colors.white))))),
       ),
     ])));
+  }
+
+  void _showAddressPicker(BuildContext context, List<Map<String, dynamic>> addresses) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Padding(padding: const EdgeInsets.all(16), child: Text('Choisir une adresse', style: GoogleFonts.playfairDisplay(fontSize: AppFontSize.lg, fontWeight: FontWeight.w700))),
+          ...addresses.map((a) => ListTile(
+            leading: Container(width: 42, height: 42, decoration: BoxDecoration(color: AppColors.accentLight, borderRadius: BorderRadius.circular(AppRadius.sm)),
+              child: const Center(child: Icon(FeatherIcons.mapPin, size: 19, color: AppColors.primary))),
+            title: Text(a['full_name'] ?? '', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            subtitle: Text('${a['address']}, ${a['postal_code']} ${a['city']}', style: GoogleFonts.inter(fontSize: 12)),
+            onTap: () {
+              setState(() {
+                _nameCtrl.text = a['full_name'] ?? '';
+                _phoneCtrl.text = a['phone'] ?? '';
+                _addressCtrl.text = a['address'] ?? '';
+                _cityCtrl.text = a['city'] ?? '';
+                _postalCtrl.text = a['postal_code'] ?? '';
+              });
+              Navigator.pop(ctx);
+            },
+          )),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
   }
 
   Widget _field(String label, TextEditingController ctrl, String hint, {TextInputType? keyboard}) => Padding(

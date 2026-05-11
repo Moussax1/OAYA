@@ -19,9 +19,9 @@ serve(async (req: Request) => {
   try {
     const { order_id, user_email } = await req.json();
 
-    if (!order_id || !user_email) {
+    if (!order_id) {
       return new Response(
-        JSON.stringify({ error: "order_id and user_email are required." }),
+        JSON.stringify({ error: "order_id is required." }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -42,6 +42,28 @@ serve(async (req: Request) => {
       return new Response(
         JSON.stringify({ error: "Order not found." }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Resolve recipient email if it was not passed by the caller.
+    let recipientEmail = user_email;
+    if (!recipientEmail) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("id", order.user_id)
+        .maybeSingle();
+
+      if (profile?.id) {
+        const { data: authUser } = await supabase.auth.admin.getUserById(profile.id);
+        recipientEmail = authUser.user?.email ?? undefined;
+      }
+    }
+
+    if (!recipientEmail) {
+      return new Response(
+        JSON.stringify({ error: "Unable to resolve recipient email." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -88,21 +110,31 @@ serve(async (req: Request) => {
       </div>
     `;
 
-    // Send via Mailtrap API
+    // Send via Mailtrap Sandbox API
     const mailtrapToken = Deno.env.get("MAILTRAP_API_TOKEN");
+    const inboxId = Deno.env.get("MAILTRAP_INBOX_ID");
     const senderEmail = Deno.env.get("MAILTRAP_SENDER_EMAIL") || "noreply@oaya.store";
 
-    const emailResponse = await fetch("https://send.api.mailtrap.io/api/send", {
+    if (!mailtrapToken || !inboxId) {
+      console.error("Missing Mailtrap configuration");
+      return new Response(
+        JSON.stringify({ error: "Email service not configured correctly." }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const emailResponse = await fetch(`https://sandbox.api.mailtrap.io/api/send/${inboxId}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Api-Token": mailtrapToken!,
+        "Api-Token": mailtrapToken,
       },
       body: JSON.stringify({
         from: { email: senderEmail, name: "OAYA Store" },
-        to: [{ email: user_email }],
+        to: [{ email: recipientEmail }],
         subject: `OAYA — Confirmation de commande #${order_id.substring(0, 8).toUpperCase()}`,
         html: emailHtml,
+        category: "Integration Test",
       }),
     });
 

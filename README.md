@@ -59,17 +59,15 @@ flutter pub get
 ### 2. Configure environment
 
 ```bash
-cp .env.example .env
+cp .env.example assets/.env
 ```
 
-Open `.env` and fill in your credentials:
+Open `assets/.env` and fill in your credentials:
 
 ```env
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 STRIPE_PUBLISHABLE_KEY=pk_test_...
-MAILTRAP_USERNAME=your-mailtrap-username
-MAILTRAP_PASSWORD=your-mailtrap-password
 ```
 
 ### 3. Set up Supabase
@@ -88,15 +86,30 @@ supabase login
 supabase link --project-ref your-project-ref
 supabase functions deploy create-payment-intent
 supabase functions deploy send-order-email
+supabase functions deploy stripe-webhook
 ```
 
 Add secrets to edge functions:
 
 ```bash
 supabase secrets set STRIPE_SECRET_KEY=sk_test_...
-supabase secrets set MAILTRAP_USERNAME=your-username
-supabase secrets set MAILTRAP_PASSWORD=your-password
+supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
+supabase secrets set MAILTRAP_API_TOKEN=your-mailtrap-token
+supabase secrets set MAILTRAP_SENDER_EMAIL=noreply@oaya.store
+supabase secrets set MAILTRAP_INBOX_ID=your-inbox-id
+supabase secrets set FCM_SERVER_KEY=your-fcm-server-key
 ```
+
+Run database migrations:
+
+```bash
+supabase db push --linked --include-all --yes
+```
+
+The checkout flow now uses:
+- `create-payment-intent` to initialize Stripe test payments
+- `stripe-webhook` to mark orders paid/failed and trigger notifications
+- `send-order-email` to send the receipt/confirmation email
 
 ### 4. Configure Firebase
 

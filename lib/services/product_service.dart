@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'admin_service.dart';
 import 'supabase_service.dart';
 
 class ProductService {
@@ -48,5 +49,28 @@ class ProductService {
       }
     }
     return categories.toList();
+  }
+
+  static Future<Map<String, dynamic>> createProduct(Map<String, dynamic> values) async {
+    if (!await AdminService.isCurrentUserAdmin()) {
+      throw Exception('Unauthorized');
+    }
+    final data = await _client.from('products').insert(values).select().single();
+    return Map<String, dynamic>.from(data);
+  }
+
+  static Future<Map<String, dynamic>> updateProduct(String id, Map<String, dynamic> values) async {
+    if (!await AdminService.isCurrentUserAdmin()) {
+      throw Exception('Unauthorized');
+    }
+    final data = await _client.from('products').update(values).eq('id', id).select().single();
+    return Map<String, dynamic>.from(data);
+  }
+
+  static Future<void> deleteProduct(String id) async {
+    if (!await AdminService.isCurrentUserAdmin()) {
+      throw Exception('Unauthorized');
+    }
+    await _client.from('products').delete().eq('id', id);
   }
 }
