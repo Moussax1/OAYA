@@ -41,14 +41,14 @@ class ProductService {
   /// Fetch unique categories from products table
   static Future<List<String>> getCategories() async {
     final data = await _client.from('products').select('category');
-    final categories = <String>{'Tous'};
+    final categories = <String>['Tous'];
     for (final row in data) {
       final cat = row['category'] as String?;
-      if (cat != null && cat.isNotEmpty) {
+      if (cat != null && cat.isNotEmpty && !categories.contains(cat)) {
         categories.add(cat);
       }
     }
-    return categories.toList();
+    return categories;
   }
 
   static Future<Map<String, dynamic>> createProduct(Map<String, dynamic> values) async {

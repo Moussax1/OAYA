@@ -140,8 +140,16 @@ serve(async (req: Request) => {
 
     const emailResult = await emailResponse.json();
 
+    if (!emailResponse.ok) {
+      console.error("Mailtrap API error:", emailResponse.status, emailResult);
+      return new Response(
+        JSON.stringify({ error: "Échec d'envoi d'email", details: emailResult }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ success: true, email_result: emailResult }),
+      JSON.stringify({ success: true }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {

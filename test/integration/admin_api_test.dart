@@ -31,7 +31,7 @@ void main() {
 
     await Supabase.initialize(url: url, anonKey: anonKey);
     supabaseInitialized = true;
-    SupabaseService.initialize();
+    await SupabaseService.initialize();
 
     final auth = Supabase.instance.client.auth;
     final response = await auth.signInWithPassword(email: adminEmail, password: adminPassword);

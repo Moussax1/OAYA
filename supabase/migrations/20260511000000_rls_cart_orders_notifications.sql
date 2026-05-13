@@ -20,7 +20,24 @@ DROP POLICY IF EXISTS "orders_insert" ON public.orders;
 CREATE POLICY "orders_insert" ON public.orders
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- Allow service role (bypass) for updates from edge functions — already handled by service role key
+-- Allow users to cancel their own orders (update status)
+DROP POLICY IF EXISTS "orders_update_owner" ON public.orders;
+CREATE POLICY "orders_update_owner" ON public.orders
+  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Allow users to delete their own pending orders
+DROP POLICY IF EXISTS "orders_delete_owner" ON public.orders;
+CREATE POLICY "orders_delete_owner" ON public.orders
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Allow admins to update any order (checked via is_admin RPC)
+DROP POLICY IF EXISTS "orders_update_admin" ON public.orders;
+CREATE POLICY "orders_update_admin" ON public.orders
+  FOR UPDATE USING (auth.uid() IN (
+    SELECT id FROM public.profiles WHERE role IN ('admin', 'owner')
+  ));
+
+-- Service role bypasses RLS entirely — already handled by service role key
 
 -- NOTIFICATIONS
 ALTER TABLE IF EXISTS public.notifications ENABLE ROW LEVEL SECURITY;

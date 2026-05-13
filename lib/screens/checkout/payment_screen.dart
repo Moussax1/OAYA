@@ -3,6 +3,7 @@ import 'package:feather_icons/feather_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import '../../constants/theme.dart';
 import '../../providers/providers.dart';
 import '../../services/order_service.dart';
@@ -48,48 +49,76 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
         await NotificationService.showResultDialog(context, title: 'Erreur', message: e.toString(), isSuccess: false);
         setState(() { _error = e.toString(); _loading = false; });
       }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _handleStripe() async {
-    final cart = ref.read(cartProvider);
     final auth = ref.read(authProvider);
     if (auth.user == null) return;
     try {
       setState(() { _loading = true; _error = ''; });
-      final shipping = cart.totalPrice > 100 ? 0.0 : 9.99;
-      final total = cart.totalPrice + shipping;
-      final clientSecret = await StripeService.createPaymentIntent(amount: total, currency: 'eur');
-      await StripeService.presentPaymentSheet(clientSecret: clientSecret, customerName: auth.user!.userMetadata?['full_name'], customerEmail: auth.user!.email);
-      final items = cart.items.map((item) {
+      final cartSnap = ref.read(cartProvider);
+      final shipping = cartSnap.totalPrice > 100 ? 0.0 : 9.99;
+      final total = cartSnap.totalPrice + shipping;
+      final items = cartSnap.items.map((item) {
         final product = item['product'] as Map<String, dynamic>;
         return {'product': product, 'quantity': item['quantity']};
       }).toList();
-      final order = await OrderService.createOrder(items: items, shipping: shipping, total: total, userId: auth.user!.id);
+
+      final paymentData = await StripeService.createPaymentIntent(amount: total, currency: 'eur');
+
+      final order = await OrderService.createOrder(
+        items: items, shipping: shipping, total: total,
+        userId: auth.user!.id,
+        paymentMethod: 'stripe',
+        stripePaymentId: paymentData['paymentIntentId'] as String?,
+      );
+
+      await StripeService.presentPaymentSheet(
+        context: context, clientSecret: paymentData['clientSecret'] as String,
+        customerName: auth.user!.userMetadata?['full_name'],
+        customerEmail: auth.user!.email,
+      );
+
       await ref.read(cartProvider.notifier).clearCart();
       ref.invalidate(ordersProvider);
-      await NotificationService.createNotification(userId: auth.user!.id, title: 'Paiement réussi', body: 'Commande #${order['id'].toString().substring(0, 8)} payée par carte.');
-      // Trigger email via edge function
+      await NotificationService.createNotification(
+        userId: auth.user!.id, title: 'Paiement réussi',
+        body: 'Commande #${order['id'].toString().substring(0, 8)} payée par carte.',
+      );
+      // Fire-and-forget: email must not block the success screen
       _sendOrderEmail(order['id'].toString(), auth.user!.email ?? '');
       if (mounted) {
-        await NotificationService.showResultDialog(context, title: 'Paiement réussi', message: 'Votre paiement a été accepté !', isSuccess: true);
+        await NotificationService.showResultDialog(
+          context, title: 'Paiement réussi',
+          message: 'Votre paiement a été accepté !', isSuccess: true,
+        );
         context.go('/order/confirmation/${order['id']}');
       }
+    } on StripeException {
+      if (mounted) setState(() => _loading = false);
     } catch (e) {
       final msg = e.toString();
-      if (msg.contains('Canceled') || msg.contains('canceled')) { setState(() => _loading = false); return; }
       if (mounted) {
-        await NotificationService.showResultDialog(context, title: 'Paiement échoué', message: msg, isSuccess: false);
+        await NotificationService.showResultDialog(
+          context, title: 'Paiement échoué',
+          message: msg, isSuccess: false,
+        );
         setState(() { _error = msg; _loading = false; });
       }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _sendOrderEmail(String orderId, String email) {
-    // Fire and forget — edge function call
+  Future<void> _sendOrderEmail(String orderId, String email) async {
     try {
-      SupabaseService.client.functions.invoke('send-order-email', body: {'order_id': orderId, 'user_email': email});
-    } catch (_) {}
+      await SupabaseService.client.functions.invoke('send-order-email', body: {'order_id': orderId, 'user_email': email});
+    } catch (e, st) {
+      debugPrint('[PaymentScreen] sendOrderEmail error: $e\n$st');
+    }
   }
 
   @override

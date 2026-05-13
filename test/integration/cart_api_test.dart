@@ -20,7 +20,7 @@ void main() {
       url: dotenv.env['SUPABASE_URL']!,
       anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
     );
-    SupabaseService.initialize();
+    await SupabaseService.initialize();
 
     try {
       final response = await Supabase.instance.client.auth.signInWithPassword(

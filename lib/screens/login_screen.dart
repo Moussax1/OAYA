@@ -13,6 +13,10 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  static const _emailFieldKey = Key('login_email_field');
+  static const _passwordFieldKey = Key('login_password_field');
+  static const _submitButtonKey = Key('login_submit_button');
+
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _showPw = false, _loading = false;
@@ -60,7 +64,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Row(children: [const Icon(FeatherIcons.alertCircle, size: 16, color: AppColors.error), const SizedBox(width: 8),
               Expanded(child: Text(_error, style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w500, color: AppColors.error)))])),
           Text('Adresse email', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-          const SizedBox(height: 8), _inputField(_emailCtrl, 'votre@email.com', FeatherIcons.mail, keyboard: TextInputType.emailAddress),
+          const SizedBox(height: 8), _inputField(_emailCtrl, 'votre@email.com', FeatherIcons.mail, fieldKey: _emailFieldKey, keyboard: TextInputType.emailAddress),
           const SizedBox(height: 16),
           Text('Mot de passe', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
           const SizedBox(height: 8), _passwordField(),
@@ -69,7 +73,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               onTap: () => context.push('/forgot-password'),
               child: Text('Mot de passe oublié ?', style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w500, color: AppColors.accent)),
             ))),
-          GestureDetector(onTap: _loading ? null : _handleLogin,
+          GestureDetector(key: _submitButtonKey, onTap: _loading ? null : _handleLogin,
             child: AnimatedContainer(duration: const Duration(milliseconds: 200), width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: _loading ? 0.6 : 1), borderRadius: BorderRadius.circular(AppRadius.md)),
               child: Center(child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -87,11 +91,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ]));
   }
 
-  Widget _inputField(TextEditingController ctrl, String hint, IconData icon, {TextInputType? keyboard}) => Container(
+  Widget _inputField(TextEditingController ctrl, String hint, IconData icon, {Key? fieldKey, TextInputType? keyboard}) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(AppRadius.md), border: Border.all(color: AppColors.border, width: 1.5)),
     child: Row(children: [Icon(icon, size: 16, color: AppColors.textMuted), const SizedBox(width: 10),
-      Expanded(child: TextField(controller: ctrl, keyboardType: keyboard, textCapitalization: TextCapitalization.none,
+      Expanded(child: TextField(key: fieldKey, controller: ctrl, keyboardType: keyboard, textCapitalization: TextCapitalization.none,
         decoration: InputDecoration.collapsed(hintText: hint, hintStyle: GoogleFonts.inter(color: AppColors.textMuted)),
         style: GoogleFonts.inter(fontSize: AppFontSize.base, color: AppColors.textPrimary)))]));
 
@@ -99,7 +103,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
     decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(AppRadius.md), border: Border.all(color: AppColors.border, width: 1.5)),
     child: Row(children: [const Icon(FeatherIcons.lock, size: 16, color: AppColors.textMuted), const SizedBox(width: 10),
-      Expanded(child: TextField(controller: _passwordCtrl, obscureText: !_showPw,
+      Expanded(child: TextField(key: _passwordFieldKey, controller: _passwordCtrl, obscureText: !_showPw,
         decoration: InputDecoration.collapsed(hintText: '••••••••', hintStyle: GoogleFonts.inter(color: AppColors.textMuted)),
         style: GoogleFonts.inter(fontSize: AppFontSize.base, color: AppColors.textPrimary))),
       GestureDetector(onTap: () => setState(() => _showPw = !_showPw),

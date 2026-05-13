@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/supabase_service.dart';
@@ -52,9 +53,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (!hadSession && data.session?.user != null) {
         try {
           await ref.read(cartProvider.notifier).mergeLocalCartFromState();
+          await ref.read(wishlistProvider.notifier).mergeGuestWishlist();
           ref.invalidate(wishlistProvider);
           ref.invalidate(addressesProvider);
-        } catch (_) {}
+        } catch (e, st) {
+          debugPrint('[AuthNotifier] merge after login error: $e\n$st');
+        }
       }
     });
   }
@@ -62,7 +66,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<Map<String, dynamic>?> _fetchProfile(String userId) async {
     try {
       return await _client.from('profiles').select().eq('id', userId).maybeSingle();
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[AuthNotifier] _fetchProfile error: $e\n$st');
       return null;
     }
   }
@@ -71,7 +76,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final result = await _client.rpc('is_admin');
       return result == true;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[AuthNotifier] isCurrentUserAdmin error: $e\n$st');
       return state.profile?['role'] == 'admin' || state.profile?['role'] == 'owner';
     }
   }
@@ -81,7 +87,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await ref.read(cartProvider.notifier).mergeLocalCartFromState();
       await ref.read(cartProvider.notifier).loadCart();
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[AuthNotifier] signUp cart merge error: $e\n$st');
+    }
     return res;
   }
 
@@ -90,16 +98,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       await ref.read(cartProvider.notifier).mergeLocalCartFromState();
       await ref.read(cartProvider.notifier).loadCart();
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[AuthNotifier] signIn cart merge error: $e\n$st');
+    }
   }
 
   Future<void> resetPassword(String email) async {
-    await _client.auth.resetPasswordForEmail(email, redirectTo: 'io.supabase.oaya://login-callback/');
+    await _client.auth.resetPasswordForEmail(email, redirectTo: 'io.supabase.oaya://login-callback');
   }
 
   Future<void> signOut() async {
     await _client.auth.signOut();
-    state = AuthState(isLoading: false);
+    // State is reset by onAuthStateChange listener above
   }
 }
 
@@ -110,10 +120,25 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) => Aut
 class CartState {
   final List<Map<String, dynamic>> items;
   final bool isLoading;
-  CartState({this.items = const [], this.isLoading = false});
+  final double _cachedTotalPrice;
+  final int _cachedTotalItems;
 
-  int get totalItems => items.fold(0, (s, i) => s + (i['quantity'] as int));
-  double get totalPrice {
+  CartState({
+    this.items = const [],
+    this.isLoading = false,
+    double? cachedTotalPrice,
+    int? cachedTotalItems,
+  })  : _cachedTotalPrice = cachedTotalPrice ?? _computeTotalPrice(items),
+        _cachedTotalItems = cachedTotalItems ?? _computeTotalItems(items);
+
+  int get totalItems => _cachedTotalItems;
+  double get totalPrice => _cachedTotalPrice;
+
+  static int _computeTotalItems(List<Map<String, dynamic>> items) {
+    return items.fold(0, (s, i) => s + (i['quantity'] as int));
+  }
+
+  static double _computeTotalPrice(List<Map<String, dynamic>> items) {
     double total = 0;
     for (final item in items) {
       final product = item['product'] as Map<String, dynamic>?;
@@ -123,6 +148,13 @@ class CartState {
       }
     }
     return total;
+  }
+
+  CartState copyWith({List<Map<String, dynamic>>? items, bool? isLoading}) {
+    return CartState(
+      items: items ?? this.items,
+      isLoading: isLoading ?? this.isLoading,
+    );
   }
 }
 
@@ -138,7 +170,8 @@ class CartNotifier extends StateNotifier<CartState> {
     try {
       final items = await CartService.getCartItems(_userId!);
       state = CartState(items: items);
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[CartNotifier] loadCart error: $e\n$st');
       state = CartState();
     }
   }
@@ -163,7 +196,9 @@ class CartNotifier extends StateNotifier<CartState> {
           updated.add({'product': product, 'quantity': qty});
         }
         state = CartState(items: updated);
-      } catch (_) {}
+      } catch (e, st) {
+        debugPrint('[CartNotifier] addItem guest error: $e\n$st');
+      }
       return;
     }
     await CartService.addItem(_userId!, productId, qty);
@@ -220,7 +255,9 @@ class CartNotifier extends StateNotifier<CartState> {
         }
       }
       await loadCart();
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[CartNotifier] mergeLocalCartFromState error: $e\n$st');
+    }
   }
 }
 
@@ -241,8 +278,29 @@ class WishlistNotifier extends StateNotifier<List<Map<String, dynamic>>> {
     if (uid == null) { state = [..._guestList]; return; }
     try {
       state = await WishlistService.getWishlist(uid);
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[WishlistNotifier] loadWishlist error: $e\n$st');
       state = [];
+    }
+  }
+
+  Future<void> mergeGuestWishlist() async {
+    final uid = _userId;
+    if (uid == null || _guestList.isEmpty) {
+      return;
+    }
+
+    try {
+      for (final product in _guestList) {
+        final productId = product['id']?.toString();
+        if (productId != null) {
+          await WishlistService.addItem(uid, productId);
+        }
+      }
+      _guestList.clear();
+      await loadWishlist();
+    } catch (e, st) {
+      debugPrint('[WishlistNotifier] mergeGuestWishlist error: $e\n$st');
     }
   }
 
@@ -258,7 +316,9 @@ class WishlistNotifier extends StateNotifier<List<Map<String, dynamic>>> {
     try {
       await WishlistService.addItem(uid, product['id'].toString());
       await loadWishlist();
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[WishlistNotifier] add error: $e\n$st');
+    }
   }
 
   Future<void> remove(dynamic productId) async {
@@ -271,7 +331,9 @@ class WishlistNotifier extends StateNotifier<List<Map<String, dynamic>>> {
     try {
       await WishlistService.removeItem(uid, productId.toString());
       await loadWishlist();
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[WishlistNotifier] remove error: $e\n$st');
+    }
   }
 
   Future<void> toggle(Map<String, dynamic> product) async {
@@ -314,7 +376,7 @@ final wishlistProvider =
 final ordersProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final auth = ref.watch(authProvider);
   if (!auth.isAuthenticated) return [];
-  return await OrderService.getOrders();
+  return await OrderService.getOrders(userId: auth.user!.id);
 });
 
 // ─── PRODUCTS ──────────────────────────────────────────────────────────────────

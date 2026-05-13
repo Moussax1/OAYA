@@ -73,25 +73,25 @@ class AppShadow {
 
   static List<BoxShadow> card = [
     BoxShadow(
-      color: Colors.black.withValues(alpha: 0.06),
-      offset: const Offset(0, 2),
-      blurRadius: 8,
+      color: Colors.black.withValues(alpha: 0.04),
+      offset: const Offset(0, 4),
+      blurRadius: 16,
     ),
   ];
 
   static List<BoxShadow> sheet = [
     BoxShadow(
-      color: Colors.black.withValues(alpha: 0.12),
-      offset: const Offset(0, -4),
-      blurRadius: 24,
+      color: Colors.black.withValues(alpha: 0.08),
+      offset: const Offset(0, -6),
+      blurRadius: 32,
     ),
   ];
 
   static List<BoxShadow> sticky = [
     BoxShadow(
-      color: Colors.black.withValues(alpha: 0.08),
-      offset: const Offset(0, 2),
-      blurRadius: 12,
+      color: Colors.black.withValues(alpha: 0.05),
+      offset: const Offset(0, 4),
+      blurRadius: 20,
     ),
   ];
 }

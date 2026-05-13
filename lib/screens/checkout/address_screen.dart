@@ -15,6 +15,13 @@ class AddressScreen extends ConsumerStatefulWidget {
 }
 
 class _AddressScreenState extends ConsumerState<AddressScreen> {
+  static const _nameFieldKey = Key('address_name_field');
+  static const _phoneFieldKey = Key('address_phone_field');
+  static const _addressFieldKey = Key('address_address_field');
+  static const _postalFieldKey = Key('address_postal_field');
+  static const _cityFieldKey = Key('address_city_field');
+  static const _continueButtonKey = Key('address_continue_button');
+
   late final TextEditingController _nameCtrl;
   final _phoneCtrl = TextEditingController();
   final _addressCtrl = TextEditingController();
@@ -45,7 +52,9 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
           _postalCtrl.text = addr['postal_code'] ?? '';
         });
       }
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('[AddressScreen] _loadDefaultAddress error: $e\n$st');
+    }
   }
 
   @override
@@ -73,7 +82,9 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
             city: _cityCtrl.text,
             postalCode: _postalCtrl.text,
           );
-        } catch (_) {}
+        } catch (e, st) {
+          debugPrint('[AddressScreen] _handleNext save address error: $e\n$st');
+        }
       }
     }
 
@@ -113,13 +124,13 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
           decoration: BoxDecoration(color: const Color(0xFFFEF2F2), borderRadius: BorderRadius.circular(AppRadius.sm), border: Border.all(color: const Color(0xFFFECACA))),
           child: Row(children: [const Icon(FeatherIcons.alertCircle, size: 16, color: AppColors.error), const SizedBox(width: 8),
             Text(_error, style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w500, color: AppColors.error))])),
-        _field('Nom complet', _nameCtrl, 'John Doe'),
-        _field('Numéro de téléphone', _phoneCtrl, '+216 XX XXX XXX', keyboard: TextInputType.phone),
-        _field('Adresse', _addressCtrl, '123 Rue de la Liberté'),
+        _field('Nom complet', _nameCtrl, 'John Doe', key: _nameFieldKey),
+        _field('Numéro de téléphone', _phoneCtrl, '+216 XX XXX XXX', key: _phoneFieldKey, keyboard: TextInputType.phone),
+        _field('Adresse', _addressCtrl, '123 Rue de la Liberté', key: _addressFieldKey),
         Row(children: [
-          Expanded(child: _field('Code Postal', _postalCtrl, '1000', keyboard: TextInputType.number)),
+          Expanded(child: _field('Code Postal', _postalCtrl, '1000', key: _postalFieldKey, keyboard: TextInputType.number)),
           const SizedBox(width: 12),
-          Expanded(flex: 2, child: _field('Ville', _cityCtrl, 'Tunis')),
+          Expanded(flex: 2, child: _field('Ville', _cityCtrl, 'Tunis', key: _cityFieldKey)),
         ]),
         CheckboxListTile(
           value: _saveAddress,
@@ -132,7 +143,7 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
       Container(
         padding: const EdgeInsets.all(AppSpacing.base),
         decoration: BoxDecoration(color: AppColors.surface, border: const Border(top: BorderSide(color: AppColors.border)), boxShadow: AppShadow.sheet),
-        child: GestureDetector(onTap: _handleNext,
+        child: GestureDetector(key: _continueButtonKey, onTap: _handleNext,
           child: Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(AppRadius.md)),
             child: Center(child: Text('Continuer vers le paiement', style: GoogleFonts.inter(fontSize: AppFontSize.base, fontWeight: FontWeight.w700, color: Colors.white))))),
@@ -168,7 +179,8 @@ class _AddressScreenState extends ConsumerState<AddressScreen> {
     );
   }
 
-  Widget _field(String label, TextEditingController ctrl, String hint, {TextInputType? keyboard}) => Padding(
+  Widget _field(String label, TextEditingController ctrl, String hint, {Key? key, TextInputType? keyboard}) => Padding(
+    key: key,
     padding: const EdgeInsets.only(bottom: 16),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(label, style: GoogleFonts.inter(fontSize: AppFontSize.sm, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),

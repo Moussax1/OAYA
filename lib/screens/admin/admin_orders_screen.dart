@@ -25,7 +25,7 @@ class _AdminOrdersScreenState extends State<AdminOrdersScreen> {
 
   Future<void> _load() async {
     try {
-      final data = await OrderService.getOrders();
+      final data = await OrderService.getOrders(userId: null);
       if (!mounted) return;
       setState(() {
         _orders = data;

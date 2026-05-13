@@ -31,7 +31,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _loadOrders() async {
     try {
-      final data = await OrderService.getOrders();
+      final auth = ref.read(authProvider);
+      final data = await OrderService.getOrders(userId: auth.user?.id);
       if (mounted) setState(() { _orders = data; _ordersLoading = false; });
     } catch (_) { if (mounted) setState(() => _ordersLoading = false); }
   }

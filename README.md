@@ -6,7 +6,6 @@
 [![Supabase](https://img.shields.io/badge/Supabase-Backend-3ECF8E?logo=supabase)](https://supabase.com)
 [![Stripe](https://img.shields.io/badge/Stripe-Payments-635BFF?logo=stripe)](https://stripe.com)
 [![Firebase](https://img.shields.io/badge/Firebase-FCM-FFCA28?logo=firebase)](https://firebase.google.com)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 **🛍️ Full-stack mobile e-commerce app — cart, payments, and push notifications in one Flutter app 📱**
 
@@ -30,7 +29,7 @@ OAYA is a complete mobile e-commerce application built with Flutter and Supabase
 - 🛒 **Cart** — add, update, remove items; cart synced to Supabase in real time
 - 💳 **Payments** — Stripe card payments (test mode) + cash on delivery
 - 📦 **Orders** — order history with status tracking and detailed receipts
-- 🔔 **Notifications** — in-app SnackBars, AlertDialogs, Firebase push notifications, and email confirmations via Mailtrap
+- 🔔 **Notifications** — in-app SnackBars, AlertDialogs, Firebase push notifications (FCM HTTP v1 + legacy), and email confirmations via Mailtrap API
 - ❤️ **Wishlist** — save products for later
 - 🔍 **Search** — full-text product search
 - 👤 **Profile** — manage account details and order history
@@ -94,10 +93,13 @@ Add secrets to edge functions:
 ```bash
 supabase secrets set STRIPE_SECRET_KEY=sk_test_...
 supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...
-supabase secrets set MAILTRAP_API_TOKEN=your-mailtrap-token
+supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+supabase secrets set MAILTRAP_API_TOKEN=your-mailtrap-api-token
 supabase secrets set MAILTRAP_SENDER_EMAIL=noreply@oaya.store
-supabase secrets set MAILTRAP_INBOX_ID=your-inbox-id
+supabase secrets set MAILTRAP_INBOX_ID=your-mailtrap-inbox-id
 supabase secrets set FCM_SERVER_KEY=your-fcm-server-key
+supabase secrets set FCM_SERVICE_ACCOUNT_BASE64=your-base64-service-account
+supabase secrets set FCM_PROJECT_ID=your-fcm-project-id
 ```
 
 Run database migrations:
@@ -159,9 +161,9 @@ oaya_flutter/
 │   ├── providers/          # Riverpod state management
 │   ├── screens/
 │   │   ├── checkout/       # Address, payment, success screens
-│   │   ├── admin/          # Admin user management
+│   │   ├── admin/          # Admin users, orders, products management
 │   │   └── *.dart          # Main app screens
-│   ├── services/           # Supabase, Stripe, notifications, orders
+│   ├── services/           # Supabase, Stripe, cart, orders, notifications, receipts, reviews, payment methods, admin
 │   ├── utils/              # Currency formatting, helpers
 │   ├── widgets/            # Reusable UI components
 │   ├── main.dart
@@ -169,11 +171,12 @@ oaya_flutter/
 ├── supabase/
 │   ├── functions/
 │   │   ├── create-payment-intent/
-│   │   └── send-order-email/
+│   │   ├── send-order-email/
+│   │   └── stripe-webhook/
 │   └── migrations/
 ├── test/
-│   ├── unit/               # Cart + price format tests
-│   └── integration/        # Supabase API tests
+│   ├── unit/               # Cart, cart state, payment validation, receipt, price format tests
+│   └── integration/        # Cart, order, admin, notification chain API tests
 ├── integration_test/       # E2E user journey tests
 └── android/app/
     └── google-services.json
@@ -195,12 +198,17 @@ All state is managed with **Riverpod**. Key providers:
 
 | Table | Description |
 |---|---|
-| `profiles` | User profiles + FCM token |
-| `products` | Product catalog |
+| `profiles` | User profiles + role + FCM token |
+| `products` | Product catalog with pricing, stock, badges |
 | `cart_items` | Per-user cart (RLS enforced) |
-| `orders` | Order records with status |
+| `orders` | Order records with status + Stripe payment ID + shipping |
 | `order_items` | Line items per order |
 | `notifications` | In-app notification log |
+| `addresses` | User shipping addresses |
+| `wishlist_items` | Persistent wishlist per user |
+| `reviews` | Product reviews and ratings |
+| `payment_methods` | Saved payment methods |
+| `audit_logs` | Profile role change audit trail |
 
 All tables have Row Level Security — users can only access their own data.
 
@@ -226,12 +234,53 @@ flutter test integration_test/e2e_test.dart
 | Suite | File | Tests |
 |---|---|---|
 | Unit | `test/unit/cart_test.dart` | Cart total, item count, shipping logic |
+| Unit | `test/unit/cart_state_test.dart` | CartState totalPrice computation |
 | Unit | `test/unit/price_format_test.dart` | TND currency formatting |
+| Unit | `test/unit/payment_validation_test.dart` | Luhn check, expiry, CVV validation |
+| Unit | `test/unit/receipt_service_test.dart` | Receipt text, PDF generation |
 | Integration | `test/integration/cart_api_test.dart` | Add, update, remove cart items via Supabase |
 | Integration | `test/integration/order_api_test.dart` | Create and fetch orders via Supabase |
-| E2E | `integration_test/e2e_test.dart` | Full user journey: login → cart → checkout → confirmation |
+| Integration | `test/integration/admin_api_test.dart` | Role management, order status updates |
+| Integration | `test/integration/notification_chain_test.dart` | Order → notification → read cycle |
+| E2E | `integration_test/e2e_test.dart` | Full user journey: COD, Mocked Stripe Flow, and real-time notification callbacks |
 
 ---
+
+## Testing & CI notes
+
+We provide an in-app mock payment sheet to let Flutter integration tests exercise the full checkout flow without requiring native UI automation. To run the E2E suite using the mock payment sheet, enable it in your test setup:
+
+```dart
+// In your test (setUp)
+StripeService.useMockPaymentSheet = true;
+
+// In tearDown
+StripeService.useMockPaymentSheet = false;
+```
+
+Run the focused E2E locally on an emulator or device:
+
+```bash
+flutter test integration_test/e2e_test.dart -r expanded --no-pub
+```
+
+Other helpful test commands:
+
+```bash
+# Unit tests
+flutter test test/unit/
+
+# Integration API tests (requires SUPABASE env variables)
+flutter test test/integration/
+
+# Clean build artifacts
+flutter clean
+```
+
+Notes for contributors:
+- Several widgets expose stable keys used by tests (for example `login_email_field`, `login_password_field`, `address_continue_button`, `stripe_card_number_field`) — prefer these keys when adding new tests.
+- `SupabaseService.initialize()` is idempotent; ensure your test setup doesn't reinitialize Supabase repeatedly and that `.env` is configured for integration tests.
+- The real Stripe PaymentSheet is a native overlay and cannot be driven by `integration_test` — use the in-app mock for full in-Flutter flows or use native automation (Appium / Espresso / XCUITest) if you need to exercise the real native sheet.
 
 ## Payment
 
@@ -255,14 +304,14 @@ Payment flow:
 
 ## Notifications
 
-Three notification channels are implemented:
+Four notification channels are implemented:
 
 | Type | Trigger | Implementation |
 |---|---|---|
-| In-app SnackBar | Item added to cart | `NotificationService.showSnackBar()` |
-| In-app AlertDialog | Payment success/failure | `NotificationService.showResultDialog()` |
-| Push (FCM) | Order status change | Firebase Cloud Messaging |
-| Email | After payment | Supabase edge function → Mailtrap SMTP |
+| In-app SnackBar | Cart actions | `NotificationService.showSnackBar()` |
+| In-app AlertDialog | Payment result | `NotificationService.showResultDialog()` |
+| Push (FCM) | Order status change | Firebase Cloud Messaging (HTTP v1 + legacy) |
+| Email | After payment | Supabase edge function → Mailtrap API |
 
 ---
 
@@ -273,9 +322,10 @@ Three notification channels are implemented:
 Supabase handles all backend infrastructure — no separate server needed. Edge functions run on Deno.
 
 ```bash
-# Deploy both edge functions
+# Deploy all edge functions
 supabase functions deploy create-payment-intent
 supabase functions deploy send-order-email
+supabase functions deploy stripe-webhook
 ```
 
 ### Android APK
@@ -301,9 +351,15 @@ flutter build web --release
 | `SUPABASE_URL` | ✅ | Your Supabase project URL |
 | `SUPABASE_ANON_KEY` | ✅ | Supabase anonymous key |
 | `STRIPE_PUBLISHABLE_KEY` | ✅ | Stripe publishable key (pk_test_...) |
-| `STRIPE_SECRET_KEY` | ✅ | Stripe secret key — edge function only |
-| `MAILTRAP_USERNAME` | ✅ | Mailtrap SMTP username |
-| `MAILTRAP_PASSWORD` | ✅ | Mailtrap SMTP password |
+| `STRIPE_SECRET_KEY` | ✅ | Stripe secret key (edge function only) |
+| `STRIPE_WEBHOOK_SECRET` | ✅ | Stripe webhook signing secret (edge function only) |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service role key for edge functions |
+| `MAILTRAP_API_TOKEN` | ✅ | Mailtrap API token (not SMTP) |
+| `MAILTRAP_SENDER_EMAIL` | ✅ | Sender email for order confirmations |
+| `MAILTRAP_INBOX_ID` | ✅ | Mailtrap inbox ID |
+| `FCM_SERVER_KEY` | ⚠️ | Legacy FCM server key (fallback) |
+| `FCM_SERVICE_ACCOUNT_BASE64` | ⚠️ | FCM HTTP v1 service account (base64) |
+| `FCM_PROJECT_ID` | ⚠️ | Firebase project ID for FCM v1 |
 
 ---
 
@@ -316,12 +372,8 @@ flutter build web --release
 | Backend | Supabase (PostgreSQL + Auth + Storage + Edge Functions) |
 | Payments | Stripe (flutter_stripe, test mode) |
 | Push notifications | Firebase Cloud Messaging |
-| Email | Mailtrap (SMTP simulation) |
+| Email | Mailtrap API |
 | Navigation | go_router |
 | HTTP | Supabase client + Dio |
 
----
 
-## License
-
-MIT — see [LICENSE](LICENSE) for details.

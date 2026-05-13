@@ -26,11 +26,12 @@ class _OrderConfirmationScreenState extends ConsumerState<OrderConfirmationScree
 
   Future<void> _load() async {
     try {
-      final orders = await OrderService.getOrders();
-      final match = orders.where((o) => o['id'] == widget.orderId);
-      if (match.isNotEmpty) { _order = match.first; }
+      _order = await OrderService.getOrderById(widget.orderId);
       if (mounted) setState(() => _loading = false);
-    } catch (_) { if (mounted) setState(() => _loading = false); }
+    } catch (e, st) {
+      debugPrint('[OrderConfirmation] _load error: $e\n$st');
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _downloadReceipt() async {

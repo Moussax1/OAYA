@@ -19,7 +19,7 @@ class OrderHistoryScreen extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.base, vertical: 14),
         decoration: const BoxDecoration(color: AppColors.surface, border: Border(bottom: BorderSide(color: AppColors.border))),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          GestureDetector(onTap: () => context.pop(), child: const Padding(padding: EdgeInsets.all(4), child: Icon(FeatherIcons.arrowLeft, size: 22))),
+          GestureDetector(onTap: () => context.go('/profile'), child: const Padding(padding: EdgeInsets.all(4), child: Icon(FeatherIcons.arrowLeft, size: 22))),
           Text('Mes Commandes', style: GoogleFonts.playfairDisplay(fontSize: AppFontSize.lg, fontWeight: FontWeight.w700)),
           GestureDetector(onTap: () => ref.invalidate(ordersProvider), child: const Icon(FeatherIcons.refreshCw, size: 20)),
         ]),

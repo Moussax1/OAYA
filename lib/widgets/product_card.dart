@@ -48,7 +48,7 @@ class ProductCard extends StatelessWidget {
             Stack(
               children: [
                 AspectRatio(
-                  aspectRatio: 0.8,
+                  aspectRatio: 0.85,
                   child: imageUrl != null && imageUrl.isNotEmpty
                       ? CachedNetworkImage(
                           imageUrl: imageUrl,
@@ -74,21 +74,29 @@ class ProductCard extends StatelessWidget {
                 ),
                 // Wishlist button
                 Positioned(
-                  top: 8,
-                  right: 8,
+                  top: 10,
+                  right: 10,
                   child: GestureDetector(
                     onTap: onToggleWishlist,
-                    child: Container(
-                      padding: const EdgeInsets.all(7),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.92),
+                        color: Colors.white.withValues(alpha: 0.95),
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          )
+                        ],
                       ),
                       child: Icon(
-                        FeatherIcons.heart,
-                        size: 15,
+                        isWishlisted ? Icons.favorite : FeatherIcons.heart,
+                        size: 16,
                         color:
-                            isWishlisted ? AppColors.sale : AppColors.primary,
+                            isWishlisted ? AppColors.sale : AppColors.primarySoft,
                       ),
                     ),
                   ),

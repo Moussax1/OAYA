@@ -24,7 +24,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     try {
       await Supabase.instance.client.auth.resetPasswordForEmail(
         email,
-        redirectTo: 'com.oaya.oaya_flutter://reset-password',
+        redirectTo: 'io.supabase.oaya://login-callback',
       );
       if (mounted) {
         await NotificationService.showResultDialog(

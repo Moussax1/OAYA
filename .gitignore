@@ -45,6 +45,21 @@ app.*.map.json
 # Flutter plugins
 .flutter-plugins
 
+# iOS related
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework/
+ios/Flutter/Flutter.podspec
+
+# FVM (Flutter Version Management)
+.fvm/flutter_sdk
+
+# OS-specific
+Thumbs.db
+
+# Generated
+lib/generated_plugin_registrant.dart
+
 # OAYA Secrets and Configuration (CRITICAL)
 .env
 assets/.env
