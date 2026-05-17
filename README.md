@@ -50,7 +50,7 @@ OAYA is a complete mobile e-commerce application built with Flutter and Supabase
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-username/oaya_flutter.git
+git clone https://github.com/Moussax1/oaya_flutter.git
 cd oaya_flutter
 flutter pub get
 ```
